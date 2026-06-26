@@ -8,7 +8,7 @@ import { exec } from "node:child_process";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "app");
 const preferredPort = Number(process.env.REVIEW_QUIZ_PORT || 4173);
-const build = "20260626-wrongbook-mastery-github";
+const build = "20260626-annotation-pwa";
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",

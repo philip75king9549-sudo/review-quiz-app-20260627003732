@@ -885,9 +885,22 @@ function LibraryDrawer({
   );
 }
 
-function DrawingLayer({ paths = [], onChange }) {
+function DrawingLayer({ paths = [], onChange, enabled = false, color = "#dc795b", size = 14 }) {
   const svgRef = useRef(null);
   const [currentPath, setCurrentPath] = useState(null);
+
+  const normalizedPaths = paths
+    .map((path) => {
+      if (Array.isArray(path)) {
+        return { points: path, color: "#dc795b", size: 18 };
+      }
+      return {
+        points: path?.points || [],
+        color: path?.color || "#dc795b",
+        size: Number(path?.size || 18),
+      };
+    })
+    .filter((path) => path.points.length > 1);
 
   const getPoint = (event) => {
     const rect = svgRef.current.getBoundingClientRect();
@@ -901,31 +914,42 @@ function DrawingLayer({ paths = [], onChange }) {
     points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
 
   const finishPath = () => {
-    if (currentPath?.length > 1) onChange([...paths, currentPath]);
+    if (currentPath?.points?.length > 1) onChange([...paths, currentPath]);
     setCurrentPath(null);
   };
 
   return (
     <svg
       ref={svgRef}
-      className="annotation-layer"
+      className={`annotation-layer ${enabled ? "is-active" : ""}`}
       viewBox="0 0 1000 1000"
       preserveAspectRatio="none"
       onPointerDown={(event) => {
+        if (!enabled) return;
+        event.preventDefault();
         event.currentTarget.setPointerCapture?.(event.pointerId);
-        setCurrentPath([getPoint(event)]);
+        setCurrentPath({ points: [getPoint(event)], color, size: Number(size) });
       }}
       onPointerMove={(event) => {
-        if (!currentPath) return;
-        setCurrentPath((path) => [...path, getPoint(event)]);
+        if (!enabled || !currentPath) return;
+        event.preventDefault();
+        setCurrentPath((path) => ({
+          ...path,
+          points: [...(path?.points || []), getPoint(event)],
+        }));
       }}
       onPointerUp={finishPath}
       onPointerCancel={finishPath}
       onPointerLeave={finishPath}
       aria-label="论述题画笔标记区"
     >
-      {[...paths, currentPath].filter(Boolean).map((path, index) => (
-        <path key={index} d={pathToD(path)} />
+      {[...normalizedPaths, currentPath].filter(Boolean).map((path, index) => (
+        <path
+          key={index}
+          d={pathToD(path.points)}
+          stroke={path.color || "#dc795b"}
+          strokeWidth={Number(path.size || 18)}
+        />
       ))}
     </svg>
   );
@@ -951,6 +975,9 @@ function QuestionCard({
   const isReviewOnly = isReviewOnlyQuestion(question);
   const isFill = question.type === "fill";
   const isChoiceLike = question.type === "choice" || question.type === "judge";
+  const [markingEnabled, setMarkingEnabled] = useState(false);
+  const [brushColor, setBrushColor] = useState("#dc795b");
+  const [brushSize, setBrushSize] = useState(14);
   const answeredResult =
     isReviewOnly
       ? { id: question.id, selected: "已查看", correct: true }
@@ -1071,19 +1098,58 @@ function QuestionCard({
       {isReviewOnly && (
         <div className="essay-answer-card">
           <div className="essay-answer-toolbar">
-            <span>{question.type === "note" ? "资料原文 / 可用画笔标重点" : "主观题资料 / 可用画笔标重点"}</span>
-            <button
-              type="button"
-              onClick={() => onAnnotationsChange([])}
-              disabled={!annotations?.length}
-            >
-              <RotateCcw size={14} />
-              清空标记
-            </button>
+            <span>{question.type === "note" ? "资料原文 / 开启标记后可画重点" : "主观题资料 / 开启标记后可画重点"}</span>
+            <div className="annotation-tools">
+              <button
+                type="button"
+                className={`annotation-toggle ${markingEnabled ? "active" : ""}`}
+                onClick={() => setMarkingEnabled((value) => !value)}
+                aria-pressed={markingEnabled}
+              >
+                <PencilLine size={14} />
+                {markingEnabled ? "标记中" : "开启标记"}
+              </button>
+              <label>
+                颜色
+                <input
+                  type="color"
+                  value={brushColor}
+                  onChange={(event) => setBrushColor(event.target.value)}
+                  aria-label="选择画笔颜色"
+                />
+              </label>
+              <label>
+                粗细
+                <select
+                  value={brushSize}
+                  onChange={(event) => setBrushSize(Number(event.target.value))}
+                  aria-label="选择画笔粗细"
+                >
+                  <option value={8}>细</option>
+                  <option value={14}>中</option>
+                  <option value={22}>粗</option>
+                  <option value={32}>很粗</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => onAnnotationsChange([])}
+                disabled={!annotations?.length}
+              >
+                <RotateCcw size={14} />
+                清空标记
+              </button>
+            </div>
           </div>
           <div className="essay-answer-surface">
             <pre>{question.answer || question.explanation || "未识别到内容，可回到原文件核对。"}</pre>
-            <DrawingLayer paths={annotations || []} onChange={onAnnotationsChange} />
+            <DrawingLayer
+              paths={annotations || []}
+              onChange={onAnnotationsChange}
+              enabled={markingEnabled}
+              color={brushColor}
+              size={brushSize}
+            />
           </div>
         </div>
       )}

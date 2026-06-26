@@ -1964,7 +1964,7 @@ a:focus-visible {
   background: rgba(230, 239, 233, 0.72);
 }
 
-.essay-answer-toolbar span {
+.essay-answer-toolbar > span {
   color: var(--green-dark);
   font-size: 11px;
   font-weight: 800;
@@ -1988,6 +1988,52 @@ a:focus-visible {
 .essay-answer-toolbar button:disabled {
   cursor: default;
   opacity: 0.45;
+}
+
+.annotation-tools {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.annotation-tools label {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: #68756d;
+  background: rgba(255, 253, 248, 0.86);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.annotation-tools input[type="color"] {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.annotation-tools select {
+  min-height: 24px;
+  border: 1px solid rgba(39, 97, 73, 0.16);
+  border-radius: 6px;
+  color: var(--green-dark);
+  background: #fffdf8;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.annotation-tools .annotation-toggle.active {
+  color: #fffdf8;
+  background: var(--green);
+  box-shadow: 0 8px 18px rgba(39, 97, 73, 0.18);
 }
 
 .essay-answer-surface {
@@ -2020,14 +2066,20 @@ a:focus-visible {
   z-index: 2;
   width: 100%;
   height: 100%;
+  pointer-events: none;
+  touch-action: auto;
+  cursor: default;
+}
+
+.annotation-layer.is-active {
+  pointer-events: auto;
   touch-action: none;
   cursor: crosshair;
 }
 
 .annotation-layer path {
   fill: none;
-  stroke: rgba(220, 121, 91, 0.62);
-  stroke-width: 18;
+  opacity: 0.66;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -2695,6 +2747,10 @@ a:focus-visible {
   .essay-answer-toolbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .annotation-tools {
+    justify-content: flex-start;
   }
 
   .essay-answer-surface pre {
