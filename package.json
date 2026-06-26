@@ -1,0 +1,31 @@
+{
+  "name": "review-quiz-app",
+  "private": true,
+  "version": "1.0.0",
+  "packageManager": "pnpm@11.9.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/generate-sw.mjs",
+    "preview": "vite preview",
+    "test": "node --test src/lib/questionParser.test.js",
+    "android:sync": "pnpm build && cap sync android",
+    "android:apk": "pnpm run android:sync && cd android && gradlew.bat assembleDebug",
+    "android:open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "lucide-react": "^0.468.0",
+    "mammoth": "^1.9.1",
+    "pdfjs-dist": "^4.10.38",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.5"
+  }
+}

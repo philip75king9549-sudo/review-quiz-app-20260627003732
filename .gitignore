@@ -1,0 +1,8 @@
+node_modules
+dist
+.DS_Store
+*.log
+android
+复习搭子-*
+*.apk
+*.zip

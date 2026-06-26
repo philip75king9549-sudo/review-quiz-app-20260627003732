@@ -1,0 +1,9 @@
+{
+  "appId": "com.reviewbuddy.app",
+  "appName": "复习搭子",
+  "webDir": "dist",
+  "backgroundColor": "#f4f0e7",
+  "android": {
+    "backgroundColor": "#f4f0e7"
+  }
+}

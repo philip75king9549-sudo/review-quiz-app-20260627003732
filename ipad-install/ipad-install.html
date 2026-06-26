@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>复习搭子 · iPad 离线安装</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+        color: #25322b;
+        background: #f4f0e7;
+        font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      }
+      main {
+        width: min(960px, 100%);
+        display: grid;
+        grid-template-columns: minmax(280px, 430px) 1fr;
+        gap: 42px;
+        align-items: center;
+        padding: 38px;
+        border: 1px solid #dedbd1;
+        border-radius: 28px;
+        background: #fffdf8;
+        box-shadow: 0 24px 70px rgba(46, 61, 51, .14);
+      }
+      .qr {
+        width: 100%;
+        display: block;
+        border-radius: 22px;
+        background: #fffdf8;
+      }
+      .eyebrow { color: #dc795b; font-size: 14px; font-weight: 700; }
+      h1 { margin: 12px 0 10px; font-size: clamp(30px, 4vw, 48px); line-height: 1.15; }
+      .lead { color: #68736d; line-height: 1.75; }
+      ol { margin: 24px 0; padding-left: 24px; line-height: 2; }
+      li::marker { color: #276149; font-weight: 800; }
+      .ready {
+        padding: 14px 16px;
+        border-radius: 14px;
+        color: #1f4d3b;
+        background: #e6efe9;
+        font-size: 14px;
+        line-height: 1.65;
+      }
+      .url {
+        margin-top: 16px;
+        padding: 11px 13px;
+        overflow-wrap: anywhere;
+        border-radius: 10px;
+        color: #68736d;
+        background: #f3f1eb;
+        font-size: 12px;
+      }
+      @media (max-width: 760px) {
+        main { grid-template-columns: 1fr; padding: 24px; }
+        .qr { max-width: 420px; margin: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img class="qr" src="data:image/png;base64,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" alt="iPad 扫码安装二维码" />
+      <section>
+        <div class="eyebrow">iPad / iPhone 离线版</div>
+        <h1>扫码安装，之后断网也能用</h1>
+        <p class="lead">请用 iPad 相机扫码，并在 Safari 中完成一次离线缓存。</p>
+        <ol>
+          <li>扫码后使用 Safari 打开。</li>
+          <li>等待右上角显示“离线准备完成”。</li>
+          <li>点击“分享”→“添加到主屏幕”→“添加”。</li>
+          <li>从桌面图标打开一次，即可关闭电脑并断网使用。</li>
+        </ol>
+        <div class="ready">资料识别、答题和批改均在 iPad 本机完成。二维码地址只用于首次下载安装应用文件。</div>
+        <div class="url">https://api.trycloudflare.com</div>
+      </section>
+    </main>
+  </body>
+</html>
