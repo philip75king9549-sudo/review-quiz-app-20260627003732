@@ -25,23 +25,33 @@ function Get-NodePath {
 }
 
 function Stop-PreviousSession {
-  if (-not (Test-Path -LiteralPath $sessionFile)) { return }
-  try {
-    $session = Get-Content -Raw -LiteralPath $sessionFile | ConvertFrom-Json
-    foreach ($entry in @(
-      @{ Id = $session.tunnelPid; Expected = $cloudflaredPath },
-      @{ Id = $session.serverPid; Expected = $session.nodePath }
-    )) {
-      if (-not $entry.Id) { continue }
-      $process = Get-Process -Id $entry.Id -ErrorAction SilentlyContinue
-      if ($process -and $process.Path -and
-          ([IO.Path]::GetFullPath($process.Path) -eq [IO.Path]::GetFullPath($entry.Expected))) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+  if (Test-Path -LiteralPath $sessionFile) {
+    try {
+      $session = Get-Content -Raw -LiteralPath $sessionFile | ConvertFrom-Json
+      $tunnelPath = if ($session.tunnelPath) { $session.tunnelPath } else { $cloudflaredPath }
+      foreach ($entry in @(
+        @{ Id = $session.tunnelPid; Expected = $tunnelPath },
+        @{ Id = $session.serverPid; Expected = $session.nodePath }
+      )) {
+        if (-not $entry.Id) { continue }
+        $process = Get-Process -Id $entry.Id -ErrorAction SilentlyContinue
+        if ($process -and $process.Path -and
+            ([IO.Path]::GetFullPath($process.Path) -eq [IO.Path]::GetFullPath($entry.Expected))) {
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        }
       }
+    } catch {
+      # A stale or incomplete session file can be safely ignored.
     }
-  } catch {
-    # A stale or incomplete session file can be safely ignored.
   }
+
+  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+      $_.Name -eq "cloudflared.exe" -or
+      ($_.Name -eq "node.exe" -and $_.CommandLine -match "localtunnel" -and $_.CommandLine -match "4174") -or
+      ($_.Name -eq "node.exe" -and $_.CommandLine -match "vite" -and $_.CommandLine -match "4174")
+    } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
 function Test-LocalServer {
@@ -68,7 +78,15 @@ try {
   $serverError = Join-Path $outputDirectory "server-error.log"
   $tunnelOut = Join-Path $outputDirectory "tunnel.log"
   $tunnelError = Join-Path $outputDirectory "tunnel-error.log"
-  Remove-Item -LiteralPath $serverOut,$serverError,$tunnelOut,$tunnelError -Force -ErrorAction SilentlyContinue
+  $localTunnelOut = Join-Path $outputDirectory "localtunnel.log"
+  $localTunnelError = Join-Path $outputDirectory "localtunnel-error.log"
+  Remove-Item -LiteralPath $serverOut,$serverError,$tunnelOut,$tunnelError,$localTunnelOut,$localTunnelError -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath `
+    (Join-Path $outputDirectory "ipad-install.html"),`
+    (Join-Path $outputDirectory "ipad-install-qr.png"),`
+    (Join-Path $outputDirectory "ipad-install-url.txt"),`
+    $sessionFile `
+    -Force -ErrorAction SilentlyContinue
 
   $server = Start-Process `
     -FilePath $nodePath `
@@ -84,27 +102,74 @@ try {
   }
   if (-not (Test-LocalServer)) { throw "The local server did not start." }
 
-  $tunnel = Start-Process `
-    -FilePath $cloudflaredPath `
-    -ArgumentList @("tunnel", "--url", $localUrl, "--no-autoupdate") `
-    -WorkingDirectory $projectDirectory `
-    -WindowStyle Hidden `
-    -RedirectStandardOutput $tunnelOut `
-    -RedirectStandardError $tunnelError `
-    -PassThru
-
   $publicUrl = $null
-  for ($attempt = 0; $attempt -lt 120 -and -not $publicUrl; $attempt += 1) {
-    Start-Sleep -Milliseconds 500
-    $logText = @(
-      (Get-Content -Raw -LiteralPath $tunnelOut -ErrorAction SilentlyContinue),
-      (Get-Content -Raw -LiteralPath $tunnelError -ErrorAction SilentlyContinue)
-    ) -join "`n"
-    $match = [regex]::Match($logText, "https://[-a-z0-9]+\.trycloudflare\.com")
-    if ($match.Success) { $publicUrl = $match.Value }
-    if ($tunnel.HasExited) { break }
+  $tunnel = $null
+  for ($tunnelAttempt = 1; $tunnelAttempt -le 3 -and -not $publicUrl; $tunnelAttempt += 1) {
+    if ($tunnelAttempt -gt 1) { Start-Sleep -Seconds 2 }
+    Remove-Item -LiteralPath $tunnelOut,$tunnelError -Force -ErrorAction SilentlyContinue
+
+    $tunnel = Start-Process `
+      -FilePath $cloudflaredPath `
+      -ArgumentList @("tunnel", "--url", $localUrl, "--no-autoupdate") `
+      -WorkingDirectory $projectDirectory `
+      -WindowStyle Hidden `
+      -RedirectStandardOutput $tunnelOut `
+      -RedirectStandardError $tunnelError `
+      -PassThru
+
+    for ($attempt = 0; $attempt -lt 80 -and -not $publicUrl; $attempt += 1) {
+      Start-Sleep -Milliseconds 500
+      $logText = @(
+        (Get-Content -Raw -LiteralPath $tunnelOut -ErrorAction SilentlyContinue),
+        (Get-Content -Raw -LiteralPath $tunnelError -ErrorAction SilentlyContinue)
+      ) -join "`n"
+      $matches = [regex]::Matches($logText, "https://[-a-z0-9]+\.trycloudflare\.com")
+      $publicUrl = $matches |
+        ForEach-Object { $_.Value } |
+        Where-Object { $_ -ne "https://api.trycloudflare.com" } |
+        Select-Object -First 1
+      if ($tunnel.HasExited) { break }
+    }
+
+    if (-not $publicUrl -and $tunnel -and -not $tunnel.HasExited) {
+      Stop-Process -Id $tunnel.Id -Force -ErrorAction SilentlyContinue
+    }
   }
-  if (-not $publicUrl) { throw "Could not create the HTTPS tunnel. Check the network connection." }
+  if (-not $publicUrl) {
+    $npxPath = $null
+    $npxCommand = Get-Command npx.cmd -ErrorAction SilentlyContinue
+    if ($npxCommand) { $npxPath = $npxCommand.Source }
+    if (-not $npxPath) {
+      $npxCommand = Get-Command npx -ErrorAction SilentlyContinue
+      if ($npxCommand) { $npxPath = $npxCommand.Source }
+    }
+
+    if ($npxPath) {
+      $tunnel = Start-Process `
+        -FilePath $npxPath `
+        -ArgumentList @("--yes", "localtunnel", "--port", "$port", "--local-host", "127.0.0.1") `
+        -WorkingDirectory $projectDirectory `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $localTunnelOut `
+        -RedirectStandardError $localTunnelError `
+        -PassThru
+
+      for ($attempt = 0; $attempt -lt 80 -and -not $publicUrl; $attempt += 1) {
+        Start-Sleep -Milliseconds 500
+        $logText = @(
+          (Get-Content -Raw -LiteralPath $localTunnelOut -ErrorAction SilentlyContinue),
+          (Get-Content -Raw -LiteralPath $localTunnelError -ErrorAction SilentlyContinue)
+        ) -join "`n"
+        $match = [regex]::Match($logText, "https://[-a-z0-9]+\.loca\.lt")
+        if ($match.Success) { $publicUrl = $match.Value }
+        if ($tunnel.HasExited) { break }
+      }
+    }
+  }
+
+  if (-not $publicUrl) {
+    throw "Could not create the HTTPS tunnel. Current DNS can resolve normal websites, but the tunnel provider failed. Try another Wi-Fi/hotspot or set DNS to 1.1.1.1 / 8.8.8.8."
+  }
 
   $qrPage = & $nodePath $qrScript $publicUrl $outputDirectory
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $qrPage)) {
@@ -115,9 +180,20 @@ try {
     url = $publicUrl
     serverPid = $server.Id
     tunnelPid = $tunnel.Id
+    tunnelPath = $tunnel.Path
     nodePath = $nodePath
     createdAt = (Get-Date).ToString("s")
   } | ConvertTo-Json | Set-Content -LiteralPath $sessionFile -Encoding UTF8
+
+  $desktopDirectory = [Environment]::GetFolderPath("Desktop")
+  if ($desktopDirectory -and (Test-Path -LiteralPath $desktopDirectory)) {
+    Copy-Item -LiteralPath (Join-Path $outputDirectory "ipad-install.html") `
+      -Destination (Join-Path $desktopDirectory "ReviewQuiz-iPad-PWA-Install.html") -Force
+    Copy-Item -LiteralPath (Join-Path $outputDirectory "ipad-install-qr.png") `
+      -Destination (Join-Path $desktopDirectory "ReviewQuiz-iPad-PWA-QR.png") -Force
+    Copy-Item -LiteralPath (Join-Path $outputDirectory "ipad-install-url.txt") `
+      -Destination (Join-Path $desktopDirectory "ReviewQuiz-iPad-PWA-URL.txt") -Force
+  }
 
   Start-Process -FilePath $qrPage
   Remove-Item -LiteralPath $errorLog -Force -ErrorAction SilentlyContinue
@@ -128,12 +204,14 @@ try {
     $_.Exception.Message,
     $_.ScriptStackTrace
   ) | Set-Content -LiteralPath $errorLog -Encoding UTF8
-  Add-Type -AssemblyName PresentationFramework
-  [System.Windows.MessageBox]::Show(
-    "The iPad installer could not start: $($_.Exception.Message)`nSee ipad-launcher-error.log.",
-    "Review Quiz",
-    "OK",
-    "Error"
-  ) | Out-Null
+  if ($env:REVIEW_QUIZ_NO_POPUP -ne "1") {
+    Add-Type -AssemblyName PresentationFramework
+    [System.Windows.MessageBox]::Show(
+      "The iPad offline PWA QR code was not generated: $($_.Exception.Message)`nSee ipad-launcher-error.log.",
+      "Review Quiz",
+      "OK",
+      "Error"
+    ) | Out-Null
+  }
   exit 1
 }

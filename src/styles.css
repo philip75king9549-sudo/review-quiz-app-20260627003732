@@ -2036,6 +2036,26 @@ a:focus-visible {
   box-shadow: 0 8px 18px rgba(39, 97, 73, 0.18);
 }
 
+.annotation-tool-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(39, 97, 73, 0.08);
+}
+
+.annotation-tool-switch button {
+  min-height: 26px;
+  padding: 0 8px;
+  background: transparent;
+}
+
+.annotation-tool-switch button.active {
+  color: #fffdf8;
+  background: var(--green);
+  box-shadow: 0 6px 14px rgba(39, 97, 73, 0.16);
+}
+
 .essay-answer-surface {
   position: relative;
   min-height: 220px;
@@ -2082,6 +2102,12 @@ a:focus-visible {
   opacity: 0.66;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.annotation-layer path.eraser-preview {
+  opacity: 0.72;
+  stroke: #fffdf8;
+  filter: drop-shadow(0 0 2px rgba(39, 97, 73, 0.35));
 }
 
 .question-actions {

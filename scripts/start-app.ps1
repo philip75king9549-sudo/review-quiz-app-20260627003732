@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $errorLog = Join-Path $projectDirectory "launcher-error.log"
-$url = "http://127.0.0.1:4173/?build=20260626-annotation-pwa"
+$url = "http://127.0.0.1:4173/?build=20260627-eraser-pwa"
 $vitePath = Join-Path $projectDirectory "node_modules\vite\bin\vite.js"
 
 function Test-AppReady {

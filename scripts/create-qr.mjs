@@ -9,7 +9,7 @@ if (!url || !outputDirectory) {
 }
 
 await mkdir(outputDirectory, { recursive: true });
-const qrDataUrl = await QRCode.toDataURL(url, {
+const qrOptions = {
   errorCorrectionLevel: "H",
   margin: 2,
   width: 560,
@@ -17,7 +17,11 @@ const qrDataUrl = await QRCode.toDataURL(url, {
     dark: "#1f4d3b",
     light: "#fffdf8",
   },
-});
+};
+
+const qrDataUrl = await QRCode.toDataURL(url, qrOptions);
+await QRCode.toFile(path.join(outputDirectory, "ipad-install-qr.png"), url, qrOptions);
+await writeFile(path.join(outputDirectory, "ipad-install-url.txt"), url, "utf8");
 
 const escapedUrl = url
   .replaceAll("&", "&amp;")

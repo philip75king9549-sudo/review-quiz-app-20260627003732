@@ -3,6 +3,7 @@ dist
 .DS_Store
 *.log
 android
+ipad-install/
 复习搭子-*
 *.apk
 *.zip

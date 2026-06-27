@@ -8,6 +8,7 @@ import {
   ChevronDown,
   CircleAlert,
   Download,
+  Eraser,
   FileCheck2,
   FileText,
   FolderOpen,
@@ -885,22 +886,36 @@ function LibraryDrawer({
   );
 }
 
-function DrawingLayer({ paths = [], onChange, enabled = false, color = "#dc795b", size = 14 }) {
+function DrawingLayer({
+  paths = [],
+  onChange,
+  enabled = false,
+  tool = "pen",
+  color = "#dc795b",
+  size = 14,
+  eraserSize = 56,
+}) {
   const svgRef = useRef(null);
   const [currentPath, setCurrentPath] = useState(null);
+  const workingPathsRef = useRef(paths);
 
-  const normalizedPaths = paths
-    .map((path) => {
-      if (Array.isArray(path)) {
-        return { points: path, color: "#dc795b", size: 18 };
-      }
-      return {
-        points: path?.points || [],
-        color: path?.color || "#dc795b",
-        size: Number(path?.size || 18),
-      };
-    })
-    .filter((path) => path.points.length > 1);
+  useEffect(() => {
+    workingPathsRef.current = paths;
+  }, [paths]);
+
+  const normalizePath = (path) => {
+    if (Array.isArray(path)) {
+      return { points: path, color: "#dc795b", size: 18, tool: "pen" };
+    }
+    return {
+      points: path?.points || [],
+      color: path?.color || "#dc795b",
+      size: Number(path?.size || 18),
+      tool: path?.tool || "pen",
+    };
+  };
+
+  const normalizedPaths = paths.map(normalizePath).filter((path) => path.points.length > 1);
 
   const getPoint = (event) => {
     const rect = svgRef.current.getBoundingClientRect();
@@ -913,7 +928,40 @@ function DrawingLayer({ paths = [], onChange, enabled = false, color = "#dc795b"
   const pathToD = (points) =>
     points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
 
+  const distanceToSegment = (point, start, end) => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSquared = dx * dx + dy * dy;
+    if (!lengthSquared) return Math.hypot(point.x - start.x, point.y - start.y);
+    const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+    const projected = { x: start.x + t * dx, y: start.y + t * dy };
+    return Math.hypot(point.x - projected.x, point.y - projected.y);
+  };
+
+  const pathTouchesEraser = (path, point) => {
+    const points = path.points || [];
+    const hitRadius = Number(eraserSize) + Number(path.size || 18) / 2;
+    for (let index = 0; index < points.length; index += 1) {
+      if (Math.hypot(points[index].x - point.x, points[index].y - point.y) <= hitRadius) return true;
+      if (index > 0 && distanceToSegment(point, points[index - 1], points[index]) <= hitRadius) return true;
+    }
+    return false;
+  };
+
+  const eraseAt = (point) => {
+    const currentPaths = workingPathsRef.current || [];
+    const nextPaths = currentPaths.filter((path) => !pathTouchesEraser(normalizePath(path), point));
+    if (nextPaths.length !== currentPaths.length) {
+      workingPathsRef.current = nextPaths;
+      onChange(nextPaths);
+    }
+  };
+
   const finishPath = () => {
+    if (currentPath?.tool === "eraser") {
+      setCurrentPath(null);
+      return;
+    }
     if (currentPath?.points?.length > 1) onChange([...paths, currentPath]);
     setCurrentPath(null);
   };
@@ -928,14 +976,29 @@ function DrawingLayer({ paths = [], onChange, enabled = false, color = "#dc795b"
         if (!enabled) return;
         event.preventDefault();
         event.currentTarget.setPointerCapture?.(event.pointerId);
-        setCurrentPath({ points: [getPoint(event)], color, size: Number(size) });
+        const point = getPoint(event);
+        if (tool === "eraser") {
+          setCurrentPath({ points: [point], color: "#ffffff", size: Number(eraserSize), tool: "eraser" });
+          eraseAt(point);
+          return;
+        }
+        setCurrentPath({ points: [point], color, size: Number(size), tool: "pen" });
       }}
       onPointerMove={(event) => {
         if (!enabled || !currentPath) return;
         event.preventDefault();
+        const point = getPoint(event);
+        if (currentPath.tool === "eraser") {
+          setCurrentPath((path) => ({
+            ...path,
+            points: [...(path?.points || []), point],
+          }));
+          eraseAt(point);
+          return;
+        }
         setCurrentPath((path) => ({
           ...path,
-          points: [...(path?.points || []), getPoint(event)],
+          points: [...(path?.points || []), point],
         }));
       }}
       onPointerUp={finishPath}
@@ -947,7 +1010,8 @@ function DrawingLayer({ paths = [], onChange, enabled = false, color = "#dc795b"
         <path
           key={index}
           d={pathToD(path.points)}
-          stroke={path.color || "#dc795b"}
+          className={path.tool === "eraser" ? "eraser-preview" : ""}
+          stroke={path.tool === "eraser" ? "#ffffff" : path.color || "#dc795b"}
           strokeWidth={Number(path.size || 18)}
         />
       ))}
@@ -976,8 +1040,10 @@ function QuestionCard({
   const isFill = question.type === "fill";
   const isChoiceLike = question.type === "choice" || question.type === "judge";
   const [markingEnabled, setMarkingEnabled] = useState(false);
+  const [annotationTool, setAnnotationTool] = useState("pen");
   const [brushColor, setBrushColor] = useState("#dc795b");
   const [brushSize, setBrushSize] = useState(14);
+  const [eraserSize, setEraserSize] = useState(56);
   const answeredResult =
     isReviewOnly
       ? { id: question.id, selected: "已查看", correct: true }
@@ -1106,31 +1172,73 @@ function QuestionCard({
                 onClick={() => setMarkingEnabled((value) => !value)}
                 aria-pressed={markingEnabled}
               >
-                <PencilLine size={14} />
-                {markingEnabled ? "标记中" : "开启标记"}
+                {annotationTool === "eraser" ? <Eraser size={14} /> : <PencilLine size={14} />}
+                {markingEnabled ? (annotationTool === "eraser" ? "橡皮中" : "标记中") : "开启标记"}
               </button>
-              <label>
-                颜色
-                <input
-                  type="color"
-                  value={brushColor}
-                  onChange={(event) => setBrushColor(event.target.value)}
-                  aria-label="选择画笔颜色"
-                />
-              </label>
-              <label>
-                粗细
-                <select
-                  value={brushSize}
-                  onChange={(event) => setBrushSize(Number(event.target.value))}
-                  aria-label="选择画笔粗细"
+              <div className="annotation-tool-switch" role="group" aria-label="选择标记工具">
+                <button
+                  type="button"
+                  className={annotationTool === "pen" ? "active" : ""}
+                  onClick={() => {
+                    setAnnotationTool("pen");
+                    setMarkingEnabled(true);
+                  }}
                 >
-                  <option value={8}>细</option>
-                  <option value={14}>中</option>
-                  <option value={22}>粗</option>
-                  <option value={32}>很粗</option>
-                </select>
-              </label>
+                  <PencilLine size={14} />
+                  画笔
+                </button>
+                <button
+                  type="button"
+                  className={annotationTool === "eraser" ? "active" : ""}
+                  onClick={() => {
+                    setAnnotationTool("eraser");
+                    setMarkingEnabled(true);
+                  }}
+                >
+                  <Eraser size={14} />
+                  橡皮
+                </button>
+              </div>
+              {annotationTool === "pen" ? (
+                <>
+                  <label>
+                    颜色
+                    <input
+                      type="color"
+                      value={brushColor}
+                      onChange={(event) => setBrushColor(event.target.value)}
+                      aria-label="选择画笔颜色"
+                    />
+                  </label>
+                  <label>
+                    粗细
+                    <select
+                      value={brushSize}
+                      onChange={(event) => setBrushSize(Number(event.target.value))}
+                      aria-label="选择画笔粗细"
+                    >
+                      <option value={8}>细</option>
+                      <option value={14}>中</option>
+                      <option value={22}>粗</option>
+                      <option value={32}>很粗</option>
+                    </select>
+                  </label>
+                </>
+              ) : (
+                <label>
+                  橡皮
+                  <select
+                    value={eraserSize}
+                    onChange={(event) => setEraserSize(Number(event.target.value))}
+                    aria-label="选择橡皮擦大小"
+                  >
+                    <option value={36}>小</option>
+                    <option value={56}>中</option>
+                    <option value={82}>大</option>
+                    <option value={116}>超大</option>
+                  </select>
+                </label>
+              )}
               <button
                 type="button"
                 onClick={() => onAnnotationsChange([])}
@@ -1147,8 +1255,10 @@ function QuestionCard({
               paths={annotations || []}
               onChange={onAnnotationsChange}
               enabled={markingEnabled}
+              tool={annotationTool}
               color={brushColor}
               size={brushSize}
+              eraserSize={eraserSize}
             />
           </div>
         </div>
